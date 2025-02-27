@@ -1,0 +1,7 @@
+openai
+pandas
+langchain
+langgraph
+pydantic
+langchain_community
+langsmith
