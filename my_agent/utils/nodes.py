@@ -1,10 +1,18 @@
 # nodes.py
 from typing import Dict, Any
-from my_agent.utils.tools import extract_evidence, fetch_evidence, image_analysis, excel_reader
+from typing_extensions import TypedDict
+from utils.tools import extract_evidence, fetch_evidence, image_analysis, excel_reader, gather_scope
 
-def start_node(state: Dict[str, Any]) -> Dict[str, Any]:
-    """ Start node initializes the workflow. """
-    state["message"] = "Starting process..."
+class get_control_number(TypedDict):
+    control_number: str
+
+class summary(TypedDict):
+    summary: str
+
+def fetch_scope(state: get_control_number) -> Dict[str, Any]:
+    """ Gets the scope for the workflow. """
+    base_file = r"C:\Users\Ajinkya\Desktop\Projects\lang-graph-poc\my_app\my_agent\Landing\CTRL0037345.xlsx"
+    state["scope"] = gather_scope(file_path=base_file, control_number=state["control_number"])
     return state
 
 def fetch_evidences(state: Dict[str, Any]) -> Dict[str, Any]:

@@ -5,7 +5,7 @@ import pandas as pd
 from typing import Dict, Any, List
 from langchain.tools import Tool, StructuredTool
 from pydantic import BaseModel
-from langchain.chat_models import AzureChatOpenAI
+from langchain_openai import AzureChatOpenAI
 import re
 import base64
 import json
@@ -24,6 +24,29 @@ llm = AzureChatOpenAI(
 )
 
 # Tool functions
+def gather_scope(file_path: str, control_number: str) -> Dict[str, List[str]]:
+    """
+    Extracts relevant details from an Excel file based on the given control number.
+
+    :param file_path: Path to the Excel file.
+    :param control_number: The control number to filter data.
+    :return: A dictionary with categorized details.
+    """
+    df = pd.read_excel(file_path, dtype=str) 
+    row = df[df["control_number"] == control_number]
+    ipe_columns = [col for col in df.columns if col.startswith("IPE") and "totals" not in col]
+    tally_totals_column = [col for col in df.columns if "totals" in col]
+    def clean_values(series):
+        return [str(value).replace("\n", " ").strip() for value in series.values.flatten() if pd.notna(value)]
+    ipe_details = clean_values(row[ipe_columns]) if not row.empty else []
+    tally_totals = clean_values(row[tally_totals_column]) if not row.empty else []
+    scope = {
+        "IPE": ipe_details,
+        "Tally totals": tally_totals,
+        "CPT": []  
+    }
+    return scope
+
 def extract_evidence_tool(user_query: str) -> Dict[str, List[str]]:
     """Extracts evidence filenames from user query using regex."""
     match = re.search(r"\b(\d+_IPE\d+\.jpg)\b", user_query)
