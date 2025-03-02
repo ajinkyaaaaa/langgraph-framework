@@ -7,7 +7,7 @@ from my_agent.utils.nodes import (
     llm_decision_node,
     tally_totals_node,
     end_node,
-    # should_continue
+    should_continue
 )
 # from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
@@ -30,12 +30,12 @@ workflow.add_edge("Distributor", "[Agent] IPE")
 workflow.add_edge("[Agent] IPE", "[Agent] Analyser")
 workflow.add_conditional_edges(
     "[Agent] Analyser",
-    # should_continue,
-    # {
-    #     "continue":"[Tool] Tally Totals",
-    #     "end":END
-    # }
-    lambda state: "[Tool] Tally Totals" if state["llm_decision"] else END
+    should_continue,
+    {
+        "continue":"[Tool] Tally Totals",
+        "end":"Evaluator"
+    }
+    # lambda state: "[Tool] Tally Totals" if state["llm_decision"] else END
 )
 workflow.add_edge("[Tool] Tally Totals", "Evaluator")
 workflow.add_edge("Evaluator", END)

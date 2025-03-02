@@ -36,3 +36,12 @@ def end_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """ Ends the workflow. """
     state["message"] = "Process completed."
     return state
+
+def should_continue(state):
+    messages = state["llm_decision"]
+    # If there are no tool calls, then we finish
+    if not messages:
+        return "end"
+    # Otherwise if there is, we continue
+    else:
+        return "continue"
