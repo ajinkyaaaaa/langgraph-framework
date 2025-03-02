@@ -1,6 +1,7 @@
 # nodes.py
 from typing import Dict, Any
 from my_agent.utils.tools import extract_evidence, fetch_evidence, image_analysis, excel_reader
+from typing_extensions import TypedDict
 
 def start_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """ Start node initializes the workflow. """
