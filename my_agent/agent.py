@@ -9,7 +9,16 @@ from langgraph.checkpoint.memory import MemorySaver
 from utils.state import AgentState
 from my_agent.utils.nodes import *
 
-workflow = StateGraph(AgentState, input=get_control_number)
+import os
+import ssl
+import requests
+ 
+os.environ['CURL_CA_BUNDLE'] = ''
+ssl._create_default_https_context = ssl._create_unverified_context
+
+openai.api_key = os.getenv("LANGSMITH_API_KEY")
+
+workflow = StateGraph(AgentState, input=GetControlNumber)
 # Define edges
 workflow.add_node("User Input", user_input)
 workflow.add_node("Gather Scope", establish_scope)

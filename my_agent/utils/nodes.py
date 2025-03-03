@@ -14,7 +14,7 @@ def user_input(state: GetControlNumber) -> AgentState:
 
 # establish scope for complete process
 def establish_scope(state: AgentState) -> AgentState:
-    file_path = r"/content/Landing/CTRL0037345.xlsx"
+    file_path = r"C:\Users\UV172XK\code@ey\Agentic AI\my_app\langgraph-framework\my_agent\Landing\CTRL0037345.xlsx"
     state["scope"] = gather_scope(file_path=file_path, control_number=state["control_number"])
     return state
 
@@ -50,19 +50,18 @@ def supervisor(state: AgentState) -> AgentState:
 def tally_totals_node(state: AgentState) -> AgentState:
     """ Reads an Excel file and sums relevant values. """
     query = state["scope"]["Tally"]
-    print(query)
-    evidences = extract_evidence.run(query)
+    evidences = extract_evidence.run(query[0])
     state["files"] = fetch_evidence.run(evidences)
-    excel_path = r"/content/Landing/37345_IPE3.xlsx"
+    excel_path = r"C:\Users\UV172XK\code@ey\Agentic AI\my_app\langgraph-framework\my_agent\Landing\37345_IPE3.xlsx"
     excel_total = excel_reader.run(excel_path)
     result = []
-    for file in state["files"]["image_path"].values():
+    for file in state["files"]["image_path"]:
         tally_result = image_analysis.run({"query": query, "image_path": file})
         result.append(tally_result)
     state["tally_checkpoints"] = result
     return state
 
-def evaluator(state: Dict[str, Any]) -> Dict[str, Any]:
+def evaluator(state: AgentState) -> AgentState:
     """ Ends the workflow. """
     state["message"] = "Process completed."
     return state
@@ -70,7 +69,7 @@ def evaluator(state: Dict[str, Any]) -> Dict[str, Any]:
 def should_continue(state):
     messages = state["llm_decision"]
     # If there are no tool calls, then we finish
-    if not messages:
+    if messages!="yes":
         return "end"
     # Otherwise if there is, we continue
     else:

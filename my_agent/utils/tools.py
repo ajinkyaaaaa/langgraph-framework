@@ -5,7 +5,8 @@ import pandas as pd
 from typing import Dict, Any, List
 from langchain.tools import Tool, StructuredTool
 from pydantic import BaseModel
-from langchain.chat_models import AzureChatOpenAI
+# from langchain.chat_models import AzureChatOpenAI
+from langchain_openai import AzureChatOpenAI
 import re
 import base64
 import json
@@ -13,6 +14,7 @@ import json
 
 openai.api_key = os.getenv("openai_api_key")
 openai.azure_endpoint = os.getenv("openai_azure_endpoint")
+openai.api_type = "azure"
 
 llm = AzureChatOpenAI(
     deployment_name="gpt-4o-mini",
@@ -58,7 +60,7 @@ def extract_evidence_tool(user_query: str) -> Dict[str, List[str]]:
 
 def fetch_evidence_tool(evidences_required: Dict[str, Any]) -> Dict[str, Any]:
     print(f"Fetching evidences: {evidences_required}")
-    landing_folder = "/content/Landing/"
+    landing_folder = r"C:\Users\UV172XK\code@ey\Agentic AI\my_app\langgraph-framework\my_agent\Landing"
     file_paths = [os.path.join(landing_folder, filename) for filename in evidences_required]
     existing_files = [path for path in file_paths if os.path.exists(path)]
     print(f"Existing files found: {existing_files}")
