@@ -24,20 +24,49 @@ llm = AzureChatOpenAI(
 )
 
 # Tool functions
+def gather_scope(file_path: str, control_number: str) -> Dict[str, List[str]]:
+    print(f"Gathering scope from {file_path} for control number {control_number}")
+    df = pd.read_excel(file_path, dtype=str) 
+    row = df[df["control_number"] == control_number]
+    
+    if row.empty:
+        print("No matching rows found for control number.")
+    
+    ipe_columns = [col for col in df.columns if col.startswith("IPE") and "totals" not in col]
+    tally_totals_column = [col for col in df.columns if "totals" in col]
+
+    def clean_values(series):
+        return [str(value).replace("\n", " ").strip() for value in series.values.flatten() if pd.notna(value)]
+    
+    ipe_details = clean_values(row[ipe_columns]) if not row.empty else []
+    tally_totals = clean_values(row[tally_totals_column]) if not row.empty else []
+
+    scope = {
+        "IPE": ipe_details,
+        "Tally": tally_totals,
+        "CPT": []  
+    }
+    print(f"Extracted scope: {scope}")
+    return scope
+
 def extract_evidence_tool(user_query: str) -> Dict[str, List[str]]:
-    """Extracts evidence filenames from user query using regex."""
-    match = re.search(r"\b(\d+_IPE\d+\.jpg)\b", user_query)
-    return {"evidences": [match.group(1)]} if match else {"evidences": []}
+    print(f"Extracting evidence from query: {user_query}")
+    matches = re.findall(r"\b(\d+_IPE\d+\.(jpg|jpeg|png|xls|xlsx))\b", user_query, re.IGNORECASE)
+    evidences = [match[0] for match in matches] if matches else []
+    print(f"Extracted evidences: {evidences}")
+    return {"evidences": evidences}
 
 def fetch_evidence_tool(evidences_required: Dict[str, Any]) -> Dict[str, Any]:
-    """Fetches file paths for evidence images, verifying their existence."""
+    print(f"Fetching evidences: {evidences_required}")
     landing_folder = "/content/Landing/"
     file_paths = [os.path.join(landing_folder, filename) for filename in evidences_required]
     existing_files = [path for path in file_paths if os.path.exists(path)]
-    return {"image_path": existing_files[0]} if existing_files else {"image_path": None}
+    print(f"Existing files found: {existing_files}")
+    return {"image_path": existing_files} 
 
 def image_analysis_tool(query: str, image_path: str) -> Dict[str, Any]:
-    """Encodes the image to Base64 and sends it to GPT-4o for validation."""
+    print(f"Analyzing image: {image_path} for query: {query}")
+    
     if not image_path:
         return {"error": "Image path missing."}
     
@@ -45,34 +74,43 @@ def image_analysis_tool(query: str, image_path: str) -> Dict[str, Any]:
         base64_image = base64.b64encode(img_file.read()).decode("utf-8")
     
     messages = [
+        {"role": "system", "content": """You must strictly respond in JSON format as follows:
+
+        {{
+            "valid": "yes" or "no",
+            "comments": "Comment on the observation (always mention the image being analyzed)"
+        }}
+
+        Do not include any other text, explanations, or code blocks. Just return the JSON.
+        """},
         {"role": "user", "content": [
             {"type": "text", "text": query},
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
         ]}
     ]
-    
+
     response = openai.chat.completions.create(
         model="gpt-4o-mini",
         messages=messages,
         temperature=0.01,
-        max_tokens=500
+        max_tokens=4000
     )
     
     answer = response.choices[0].message.content.lower()
-    answer = re.sub(r"```json\n(.*?)\n```", r"\1", answer, flags=re.DOTALL).strip()
-    # result = "yes" in answer or "correct" in answer or "valid" in answer
-    # return {"valid": result, "errors": [] if result else ["Validation failed."]}
+    print(f"Raw LLM response: {answer}")
+    
     try:
         json_output = json.loads(answer)
-        return json_output  # Ensure we return the exact JSON response
+        print(f"Parsed JSON output: {json_output}")
+        return json_output  
     except json.JSONDecodeError:
+        print("Error: Invalid JSON format returned by the model.")
         return {"error": "Invalid JSON format returned by the model.", "raw_response": answer}
 
 class ImageAnalysisInput(BaseModel):
     query: str
     image_path: str
 
-# Tool instances
 extract_evidence = Tool(
     name="ExtractEvidence",
     func=extract_evidence_tool,
@@ -92,26 +130,20 @@ image_analysis = StructuredTool(
     description="Analyzes image fields using GPT-4."
 )
 
-def process_excel_calculations(file_path: str, filter_column: str = "Account", filter_value: str = "23040100", calculation_column: str = "Amount") -> Dict[str, Any]:
+def process_excel_calculations(file_path: str) -> Dict[str, Any]:
+    print(f"Processing Excel file: {file_path}")
+    
     try:
         df = pd.read_excel(file_path, dtype=str)
-        if filter_column not in df.columns or calculation_column not in df.columns:
-            return {"error": f"Missing required columns: '{filter_column}' or '{calculation_column}'"}
-        filtered_df = df[df[filter_column] == str(filter_value)].copy()
-        if filtered_df.empty:
-            return {"error": f"No matching rows found for {filter_column} = {filter_value}"}
-        total = 0
-        for value in filtered_df[calculation_column].dropna(): 
-            value = str(value).replace(",", "") 
-
-            if value.startswith("-"):
-                total -= float(value[1:]) 
-            else:
-                total += float(value)  
+        print(f"Columns in Excel: {df.columns}")
+        
+        total = sum(float(str(value).replace(",", "").strip()) for value in df["Amount in local currency"].dropna())
         total_ = int(abs(total))
-        print("Total:", total_)
+        print(f"Calculated total: {total_}")
         return {"excel_total": total_}
+    
     except Exception as e:
+        print(f"Error processing Excel: {e}")
         return {"error": str(e)}
 
 excel_reader = Tool(
