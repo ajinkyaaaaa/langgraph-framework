@@ -15,6 +15,9 @@ from typing import Dict, Any, Optional, List
 from typing_extensions import TypedDict, Annotated
 from utils.state import ImageAnalysisInput
 
+os.environ["OPENAI_API_KEY"] = "cb4b1a0311454198ad4c9c42e9c4e5d7"
+os.environ["OPENAI_AZURE_ENDPOINT"] = "https://swcdoai2x2aoa01.openai.azure.com"
+os.environ["OPENAI_API_BASE"] = "https://swcdoai2x2aoa01.openai.azure.com"
 
 openai.api_key = os.getenv("openai_api_key")
 openai.azure_endpoint = os.getenv("openai_azure_endpoint")
@@ -33,8 +36,8 @@ openai.api_type = "azure"
 
 from langchain_openai import AzureChatOpenAI
 llm = AzureChatOpenAI(
-    azure_endpoint=openai.azure_endpoint,
-    openai_api_key=openai.api_key,
+    azure_endpoint=os.environ["OPENAI_AZURE_ENDPOINT"],
+    openai_api_key=os.environ["OPENAI_API_KEY"],
     deployment_name="gpt-4o-mini",
     openai_api_version="2023-05-15"  
 )
