@@ -5,3 +5,6 @@ langgraph
 pydantic
 langchain_community
 langsmith
+pandas
+
+# pip install "langgraph-cli[inmem]"
