@@ -7,18 +7,23 @@ from langgraph.checkpoint.memory import MemorySaver
 # perform_image_analysis = create_react_agent()
 # memory = MemorySaver()
 from utils.state import AgentState
-from my_agent.utils.nodes import *
-
 import os
 import ssl
 import requests
+
+########################################################
+# Run locally
+from utils.nodes import *
+# Run on cloud
+# from my_agent.utils.nodes import *
+########################################################
  
 os.environ['CURL_CA_BUNDLE'] = ''
 ssl._create_default_https_context = ssl._create_unverified_context
 
 openai.api_key = os.getenv("LANGSMITH_API_KEY")
 
-workflow = StateGraph(AgentState, input=GetControlNumber)
+workflow = StateGraph(AgentState, input=GetControlNumber, output=ShowSummary)
 # Define edges
 workflow.add_node("User Input", user_input)
 workflow.add_node("Gather Scope", establish_scope)
@@ -29,7 +34,15 @@ workflow.add_node("Evaluator", evaluator)
 # Define flow
 workflow.add_edge(START, "User Input")
 workflow.add_edge("User Input", "Gather Scope")
-workflow.add_edge("Gather Scope", "[agent] IPE Validator")
+workflow.add_conditional_edges(
+    "Gather Scope",
+    scope_continue,
+    {
+        "continue":"[agent] IPE Validator",
+        "end":"Evaluator"
+    }
+)
+# workflow.add_edge("Gather Scope", "[agent] IPE Validator")
 workflow.add_edge("[agent] IPE Validator", "[agent] Supervisor")
 workflow.add_conditional_edges(
     "[agent] Supervisor",
@@ -43,3 +56,6 @@ workflow.add_edge("[tool] Tally Totals", "Evaluator")
 workflow.add_edge("Evaluator", END)
 # executor = workflow.compile(checkpointer=memory)
 executor = workflow.compile()
+
+# Run locally in terminal
+# executor.invoke({"control_number": "CTRL0037345"})

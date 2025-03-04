@@ -2,27 +2,41 @@
 import os
 import openai
 import pandas as pd
-from typing import Dict, Any, List
 from langchain.tools import Tool, StructuredTool
 from pydantic import BaseModel
 # from langchain.chat_models import AzureChatOpenAI
-from langchain_openai import AzureChatOpenAI
+# from langchain_openai import AzureChatOpenAI
+# from langchain_community.chat_models import AzureChatOpenAI
 import re
 import base64
 import json
+import time
+from typing import Dict, Any, Optional, List
+from typing_extensions import TypedDict, Annotated
+from utils.state import ImageAnalysisInput
 
 
 openai.api_key = os.getenv("openai_api_key")
 openai.azure_endpoint = os.getenv("openai_azure_endpoint")
 openai.api_type = "azure"
 
+
+# from langchain.chat_models import AzureChatOpenAI
+# llm = AzureChatOpenAI(
+#     deployment_name="gpt-4o-mini",
+#     model="gpt-4o-mini",
+#     temperature=0.01,
+#     max_tokens=4000,
+#     openai_api_key=openai.api_key,
+#     azure_endpoint=openai.azure_endpoint,
+# )
+
+from langchain_openai import AzureChatOpenAI
 llm = AzureChatOpenAI(
-    deployment_name="gpt-4o-mini",
-    model="gpt-4o-mini",
-    temperature=0.01,
-    max_tokens=4000,
-    openai_api_key=openai.api_key,
     azure_endpoint=openai.azure_endpoint,
+    openai_api_key=openai.api_key,
+    deployment_name="gpt-4o-mini",
+    openai_api_version="2023-05-15"  
 )
 
 # Tool functions
@@ -66,52 +80,146 @@ def fetch_evidence_tool(evidences_required: Dict[str, Any]) -> Dict[str, Any]:
     print(f"Existing files found: {existing_files}")
     return {"image_path": existing_files} 
 
-def image_analysis_tool(query: str, image_path: str) -> Dict[str, Any]:
-    print(f"Analyzing image: {image_path} for query: {query}")
-    
-    if not image_path:
-        return {"error": "Image path missing."}
-    
-    with open(image_path, "rb") as img_file:
-        base64_image = base64.b64encode(img_file.read()).decode("utf-8")
-    
-    messages = [
-        {"role": "system", "content": """You must strictly respond in JSON format as follows:
 
-        {{
-            "valid": "yes" or "no",
-            "comments": "Comment on the observation (always mention the image being analyzed)"
-        }}
+def llm_function(
+        query: Optional[str] = None,
+        image_path: Optional[str] = None,
+        data: Optional[Any] = None,
+        context: Optional[str] = None,
+        for_image: bool = False,
+        for_text: bool = False,
+        return_amount: bool = False,
+    ) -> Dict[str, Any]:
+    """
+    Analyzes an image or text using GPT-4o.
 
-        Do not include any other text, explanations, or code blocks. Just return the JSON.
-        """},
-        {"role": "user", "content": [
-            {"type": "text", "text": query},
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-        ]}
-    ]
+    :param query: Query for image analysis (Required if for_image=True).
+    :param image_path: Path to the image file (Required if for_image=True).
+    :param data: Data for text analysis (Required if for_text=True).
+    :param context: Additional context (Optional).
+    :param for_image: Set to True for image-based analysis.
+    :param for_text: Set to True for text-based analysis.
+    :return: Dictionary with extracted insights or error messages.
+    """
 
-    response = openai.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=messages,
-        temperature=0.01,
-        max_tokens=4000
-    )
-    
-    answer = response.choices[0].message.content.lower()
-    print(f"Raw LLM response: {answer}")
-    
-    try:
-        json_output = json.loads(answer)
-        print(f"Parsed JSON output: {json_output}")
-        return json_output  
-    except json.JSONDecodeError:
-        print("Error: Invalid JSON format returned by the model.")
-        return {"error": "Invalid JSON format returned by the model.", "raw_response": answer}
+    if for_image and not (query and image_path):
+        return {"error": "Missing required parameters: 'query' and 'image_path' are needed for image analysis."}
 
-class ImageAnalysisInput(BaseModel):
-    query: str
-    image_path: str
+    if for_text and data is None:
+        return {"error": "Missing required parameter: 'data' is needed for text analysis."}
+
+    print(f"[INFO] Processing request | for_image: {for_image} | for_text: {for_text}")
+
+    messages = []
+
+    # Image Analysis
+    if for_image:
+        print(f"[INFO] Analyzing image: {image_path} | Query: {query}")
+
+        # Convert image to Base64
+        try:
+            with open(image_path, "rb") as img_file:
+                base64_image = base64.b64encode(img_file.read()).decode("utf-8")
+        except Exception as e:
+            return {"error": f"Failed to read image: {str(e)}"}
+
+        # Define image-processing system instructions
+        messages.append(
+            {
+                "role": "system",
+                "content": (
+                    "You must strictly respond in JSON format as follows:\n"
+                    '{\n  "valid": "yes" or "no" (yes if all fields are filled correctly),\n  "comments": "Comment on the observation (mention the image being analyzed)"\n}\n'
+                    "Do not include any other text, explanations, or code blocks—only return valid JSON."
+                ),
+            }
+        )
+        messages.append(
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": query},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}},
+                ],
+            }
+        )
+
+    # Text Analysis
+    if for_text:
+        print(f"[INFO] Analyzing text data.")
+
+        messages.append({"role": "system", "content": "You are a helpful assistant that summarizes workflows."})
+        messages.append({"role": "user", "content": data})
+        messages.append(
+            {
+                "role": "system",
+                "content": (
+                    "Summarize the given information by specifying which tests have passed and which have failed, along with reasons for failure.\n"
+                    "Important: All IPEs must pass or be valid for the Tally Totals process to begin. If any fails, Tally Totals cannot proceed.\n"
+                    "Return only the required output without explanations or additional text."
+                ),
+            }
+        )
+
+    if return_amount:
+        print(f"[INFO] Analyzing image: {image_path} | Query: {query}")
+
+        # Convert image to Base64
+        try:
+            with open(image_path, "rb") as img_file:
+                base64_image = base64.b64encode(img_file.read()).decode("utf-8")
+        except Exception as e:
+            return {"error": f"Failed to read image: {str(e)}"}
+        messages.append(
+              {
+                  "role": "user",
+                  "content": [
+                      {"type": "text", "text": f"This is what I need to validate: {query}. For this, return the amount that is found at the bottom portion of the screen, highlighted in YELLOW color. Your response should only be a number. Eg. 112345"},
+                      {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}},
+                  ],
+              }
+          )
+
+    # Add guidelines if provided
+    if context:
+        messages.append({"role": "system", "content": context})
+
+    # Retry logic for API call
+    max_retries = 30
+    attempt = 0
+    response = None
+    while attempt < max_retries:
+        try:
+            response = openai.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                temperature=0.01,
+                max_tokens=500,
+            )
+            break  # Exit loop on success
+        except Exception as e:
+            print(f"[ERROR] API Call Failed (Attempt {attempt + 1}): {str(e)}")
+            time.sleep(5)
+            attempt += 1
+
+    if not response:
+        return {"error": "Failed to get a response from the model after multiple attempts."}
+
+    answer = response.choices[0].message.content.strip()
+    print(f"[INFO] Raw LLM Response: {answer}")
+
+    # Process response for image analysis
+    if for_image:
+        try:
+            json_output = json.loads(answer)
+            print(f"[INFO] Parsed JSON Output: {json_output}")
+            return json_output
+        except json.JSONDecodeError:
+            print("[ERROR] Invalid JSON format returned by the model.")
+            return {"error": "Invalid JSON format from the model.", "raw_response": answer}
+
+    # Return text response for text analysis
+    return answer
 
 extract_evidence = Tool(
     name="ExtractEvidence",
@@ -125,27 +233,35 @@ fetch_evidence = Tool(
     description="Fetches file paths of required evidences."
 )
 
-image_analysis = StructuredTool(
+llm_call = StructuredTool(
     name="ImageAnalysis",
-    func=image_analysis_tool,
+    func=llm_function,
     args_schema=ImageAnalysisInput,
     description="Analyzes image fields using GPT-4."
 )
 
 def process_excel_calculations(file_path: str) -> Dict[str, Any]:
-    print(f"Processing Excel file: {file_path}")
-    
     try:
+        filter_value = "23040100"
+        filter_column = "Account"
+        calculation_column = "Amount in local currency"
         df = pd.read_excel(file_path, dtype=str)
-        print(f"Columns in Excel: {df.columns}")
-        
-        total = sum(float(str(value).replace(",", "").strip()) for value in df["Amount in local currency"].dropna())
+        if filter_column not in df.columns or calculation_column not in df.columns:
+            return {"error": f"Missing required columns: '{filter_column}' or '{calculation_column}'"}
+        filtered_df = df[df[filter_column] == str(filter_value)].copy()
+        if filtered_df.empty:
+            return {"error": f"No matching rows found for {filter_column} = {filter_value}"}
+        total = 0
+        for value in filtered_df[calculation_column].dropna(): 
+            value = str(value).replace(",", "") 
+
+            if value.startswith("-"):
+                total -= float(value[1:]) 
+            else:
+                total += float(value)  
         total_ = int(abs(total))
-        print(f"Calculated total: {total_}")
         return {"excel_total": total_}
-    
     except Exception as e:
-        print(f"Error processing Excel: {e}")
         return {"error": str(e)}
 
 excel_reader = Tool(
