@@ -45,18 +45,26 @@ def ipe_validator(state: AgentState) -> AgentState:
     queries = state["scope"]["IPE"]
     print(state["scope"])
     guidelines = """
-    "When analyzing the image, you must register only the fields and values that have the RED font color-ignore everything else.
-    The image follows a horizontal layout, where each field's corresponding value appears in the same row.
-    You do not need to check for exact formatting—only compare the values to see if they are similar.
-    Do not extract or mention any fields which do not have the font color as RED.
-    In the comments, explicitly state the values found and the expected values."
+    Strict compliance with the following guidelines is required:
+    1. Extract only fields and values that appear in RED font color; ignore all other text.
+    2. The image is structured in a horizontal layout, where each field's corresponding value is aligned in the same row.
+    3. Formatting precision is not required—focus on verifying whether values are similar rather than identical.
+    4. Fields that are not in RED font must not be extracted or mentioned.
+    5. Comments must explicitly state the values detected and the expected values for validation.
     """
     results = []
     for query in queries:
         evidences = extract_evidence.run(query)
         state["files"] = fetch_evidence.run(evidences)
         for file in state["files"]["image_path"]:
+        
             output = llm_call.run({"query": query, "image_path": file, "context":guidelines, "for_image":True})
+
+            if "error" in output and output["error"] == "Failed to get a response from the model after multiple attempts.":
+                results.append(output)
+                state["ipe_checkpoints"] = results
+                return state
+            
             data = f"""
             I have received the following JSON response from my LLM: {str(output)}. However, the response contains inaccuracies because the LLM is failing to correctly compare values.
 
@@ -88,6 +96,7 @@ def ipe_validator(state: AgentState) -> AgentState:
             refined_output = json.loads(temp)
             print("\nrefined_output:\n", refined_output)
             results.append(refined_output)
+            
     state["ipe_checkpoints"] = results
     return state
 
@@ -174,3 +183,14 @@ def scope_continue(state:AgentState):
         return "continue"
     else:
         return "end"
+    
+def ipe_continue(state: AgentState):
+    status = state.get("ipe_checkpoints", [])
+
+    # Check if any checkpoint contains an error message
+    for checkpoint in status:
+        if isinstance(checkpoint, dict) and "error" in checkpoint:
+            if checkpoint["error"] == "Failed to get a response from the model after multiple attempts.":
+                return "end"
+    
+    return "continue"

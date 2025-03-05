@@ -1,6 +1,6 @@
 # tools.py
 import os
-import openai
+# import openai
 import pandas as pd
 from langchain.tools import Tool, StructuredTool
 from pydantic import BaseModel
@@ -19,9 +19,9 @@ os.environ["OPENAI_API_KEY"] = "cb4b1a0311454198ad4c9c42e9c4e5d7"
 os.environ["OPENAI_AZURE_ENDPOINT"] = "https://swcdoai2x2aoa01.openai.azure.com"
 os.environ["OPENAI_API_BASE"] = "https://swcdoai2x2aoa01.openai.azure.com"
 
-openai.api_key = os.getenv("openai_api_key")
-openai.azure_endpoint = os.getenv("openai_azure_endpoint")
-openai.api_type = "azure"
+# openai.api_key = os.getenv("openai_api_key")
+# openai.azure_endpoint = os.getenv("openai_azure_endpoint")
+# openai.api_type = "azure"
 
 
 # from langchain.chat_models import AzureChatOpenAI
@@ -193,12 +193,14 @@ def llm_function(
     response = None
     while attempt < max_retries:
         try:
-            response = openai.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=messages,
-                temperature=0.01,
-                max_tokens=500,
-            )
+            # response = openai.chat.completions.create(
+            #     model="gpt-4o-mini",
+            #     messages=messages,
+            #     temperature=0.01,
+            #     max_tokens=500,
+            # )
+            response = llm.invoke(messages)
+            print("\n\nRESPONSE:\n", response)
             break  # Exit loop on success
         except Exception as e:
             print(f"[ERROR] API Call Failed (Attempt {attempt + 1}): {str(e)}")
@@ -208,7 +210,8 @@ def llm_function(
     if not response:
         return {"error": "Failed to get a response from the model after multiple attempts."}
 
-    answer = response.choices[0].message.content.strip()
+    answer = response.content
+    # answer = response.choices[0].message.content.strip()
     print(f"[INFO] Raw LLM Response: {answer}")
 
     # Process response for image analysis

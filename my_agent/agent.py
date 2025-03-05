@@ -21,8 +21,6 @@ from utils.nodes import *
 os.environ['CURL_CA_BUNDLE'] = ''
 ssl._create_default_https_context = ssl._create_unverified_context
 
-openai.api_key = os.getenv("LANGSMITH_API_KEY")
-
 workflow = StateGraph(AgentState, input=GetControlNumber, output=ShowSummary)
 # Define edges
 workflow.add_node("User Input", user_input)
@@ -43,7 +41,16 @@ workflow.add_conditional_edges(
     }
 )
 # workflow.add_edge("Gather Scope", "[agent] IPE Validator")
-workflow.add_edge("[agent] IPE Validator", "[agent] Supervisor")
+# workflow.add_edge("[agent] IPE Validator", "[agent] Supervisor")
+workflow.add_conditional_edges(
+    "[agent] IPE Validator",
+    scope_continue,
+    {
+        "continue":"[agent] Supervisor",
+        "end":"Evaluator"
+    }
+)
+
 workflow.add_conditional_edges(
     "[agent] Supervisor",
     should_continue,
