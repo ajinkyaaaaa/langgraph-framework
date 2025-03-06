@@ -1,6 +1,6 @@
 # tools.py
 import os
-# import openai
+import openai
 import pandas as pd
 from langchain.tools import Tool, StructuredTool
 from pydantic import BaseModel
@@ -14,6 +14,8 @@ import time
 from typing import Dict, Any, Optional, List
 from typing_extensions import TypedDict, Annotated
 from utils.state import ImageAnalysisInput
+import backoff
+from openai import RateLimitError
 
 os.environ["OPENAI_API_KEY"] = "cb4b1a0311454198ad4c9c42e9c4e5d7"
 os.environ["OPENAI_AZURE_ENDPOINT"] = "https://swcdoai2x2aoa01.openai.azure.com"
@@ -83,7 +85,7 @@ def fetch_evidence_tool(evidences_required: Dict[str, Any]) -> Dict[str, Any]:
     print(f"Existing files found: {existing_files}")
     return {"image_path": existing_files} 
 
-
+@backoff.on_exception(backoff.expo, RateLimitError, max_time=60)
 def llm_function(
         query: Optional[str] = None,
         image_path: Optional[str] = None,
