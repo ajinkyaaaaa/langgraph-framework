@@ -87,11 +87,12 @@ def ipe_validator(state: AgentState) -> AgentState:
 
             Rules:
             1. **Verify each value carefully** before marking it as incorrect.
-            2. If a value is already **correct**, explicitly state that it is correct.
+            2. If a value is already mentioned to be **correct**, explicitly state that it is correct and do not change it.
             3. If **all values are correct**, update `"valid": "yes"`, since this means everything is valid.
             4. **Do not** include any explanations, extra text, or formatting—return only the corrected JSON.
+            5. If 'valid' key is already 'yes', then do not change it.
             """
-            time.sleep(5)
+            time.sleep(15)
             temp = llm_call.run({"context":guidelines, "for_text":True, "data":data})
             refined_output = json.loads(temp)
             print("\nrefined_output:\n", refined_output)

@@ -11,6 +11,7 @@ import re
 import base64
 import json
 import time
+from openai import AzureOpenAI
 from typing import Dict, Any, Optional, List
 from typing_extensions import TypedDict, Annotated
 from utils.state import ImageAnalysisInput
@@ -35,14 +36,30 @@ os.environ["OPENAI_API_BASE"] = "https://swcdoai2x2aoa01.openai.azure.com"
 #     openai_api_key=openai.api_key,
 #     azure_endpoint=openai.azure_endpoint,
 # )
-
 from langchain_openai import AzureChatOpenAI
-llm = AzureChatOpenAI(
-    azure_endpoint=os.environ["OPENAI_AZURE_ENDPOINT"],
-    openai_api_key=os.environ["OPENAI_API_KEY"],
-    deployment_name="gpt-4o-mini",
-    openai_api_version="2023-05-15"  
+AZURE_ENDPOINT=os.getenv("openai_azure_endpoint")
+API_KEY= os.getenv("openai_api_key")
+CONFIG=os.getenv("OPENAI__CONFIG")
+require_llm_response_speed = True
+if require_llm_response_speed or (CONFIG.lower() == "demo"):
+    # model_deployment_name = "gpt-4-32k"
+    model_deployment_name = "gpt-4o-mini"
+else:
+    model_deployment_name = "gpt-4o"
+
+llm = AzureOpenAI(
+    azure_endpoint=AZURE_ENDPOINT,
+    api_key=API_KEY,
+    api_version="2024-07-01-preview"
 )
+# from langchain_openai import AzureChatOpenAI
+# llm = AzureChatOpenAI(
+#     azure_endpoint=os.environ["OPENAI_AZURE_ENDPOINT"],
+#     openai_api_key=os.environ["OPENAI_API_KEY"],
+#     deployment_name="gpt-4o-mini",
+#     openai_api_version="2023-05-15",
+#     max_tokens=500
+# )
 
 # Tool functions
 def gather_scope(file_path: str, control_number: str) -> Dict[str, List[str]]:
@@ -190,29 +207,28 @@ def llm_function(
         messages.append({"role": "system", "content": context})
 
     # Retry logic for API call
-    max_retries = 30
+    max_retries = 150
     attempt = 0
     response = None
     while attempt < max_retries:
         try:
-            # response = openai.chat.completions.create(
-            #     model="gpt-4o-mini",
-            #     messages=messages,
-            #     temperature=0.01,
-            #     max_tokens=500,
-            # )
-            response = llm.invoke(messages)
-            print("\n\nRESPONSE:\n", response)
+            response = llm.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                temperature=0.01,
+                max_tokens=500,
+            )
+            # response = llm.invoke(messages)
             break  # Exit loop on success
         except Exception as e:
             print(f"[ERROR] API Call Failed (Attempt {attempt + 1}): {str(e)}")
-            time.sleep(5)
+            time.sleep(15)
             attempt += 1
 
     if not response:
         return {"error": "Failed to get a response from the model after multiple attempts."}
 
-    answer = response.content
+    answer = response.choices[0].message.content.strip()
     # answer = response.choices[0].message.content.strip()
     print(f"[INFO] Raw LLM Response: {answer}")
 
